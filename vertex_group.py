@@ -37,16 +37,16 @@ class vertex_group:
     if element in self.group_vertices:
       return ELEMENT_ALREADY_IN_GROUP
 
-    group_buffer = self.group_vertices
-    self.group_vertices.append(element)
+    group_buffer = self.copy()
+    group_buffer.group_vertices.append(element)
 
-    new_weight = self.get_group_total_weight(graph)
+    new_weight = group_buffer.get_group_total_weight(graph)
 
-    if  new_weight > self.max_bound or self.min_bound > new_weight:
-      self.group_vertices = group_buffer
+    if  new_weight > self.max_bound:
       return FAILED
 
     else:
+      self.group_vertices.append(element)
       return SUCCEEDED
 
   def remove_element(self, element, graph):
@@ -54,16 +54,17 @@ class vertex_group:
       return ELEMENT_NOT_IN_GROUP
 
     elif len(self.group_vertices) > 1:
-      group_buffer = self.group_vertices
-      self.group_vertices.remove(element)
+      
+      group_buffer = self.copy()
+      group_buffer.group_vertices.remove(element)
 
-      new_weight = self.get_group_total_weight(graph)
+      new_weight = group_buffer.get_group_total_weight(graph)
 
-      if  new_weight > self.max_bound or self.min_bound > new_weight:
-        self.group_vertices = group_buffer
+      if  self.min_bound > new_weight:
         return FAILED
 
       else:
+        self.group_vertices.remove(element)
         return SUCCEEDED
         
     else:
