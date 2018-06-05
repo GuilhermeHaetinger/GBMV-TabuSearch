@@ -2,6 +2,7 @@ from vertex_group import vertex_group as Group
 from graph import graph as Graph
 from random import randint
 import sys
+import time
 
 ELEMENT_NOT_IN_GROUP     = -3
 ELEMENT_ALREADY_IN_GROUP = -2
@@ -196,12 +197,19 @@ print "initial value : " + str(initial_value)
 #=========================================================================================================================
 #=========================================================================================================================
 
-max_tabu_size   = 250
+max_tabu_size   = 100
 actual_instance = groups
 actual_value    = initial_value
 tabu_movements  = []
 best_solution_found = 0
 best_found = None
+num_of_elements = 30
+try:
+    tabu_prob = int(sys.argv[2])
+except Exception as e:
+    tabu_prob = -1
+
+init_time = time.time()
 
 
 for i in range(0, num_of_iterations):
@@ -211,24 +219,30 @@ for i in range(0, num_of_iterations):
     best_tabu_movement     = None
 
     for j in range(0, num_of_neighbors):
-        remove_index, add_index = get_random_group_indexes(groups)
-        element                 = groups[remove_index].get_random_element()
-        tabu                    = tabu_movement(add_index, element)
+        tabu = []
+        new_group_list = actual_instance[:]
+        for k in range(0, num_of_elements):
+            rand_remove, rand_add = get_random_group_indexes(new_group_list)
+            element = new_group_list[rand_remove].get_random_element()
+            if tabu_prob >= 0:
+                if randint(0, tabu_prob) == 0:
+                    tabu.append(element)
+            if element not in tabu_movements:
+                new_group_list = set_random_neighbor(new_group_list, rand_add, rand_remove, element, graph)
 
-        if tabu not in tabu_movements:
-            new_group_list     = set_random_neighbor(actual_instance, add_index, remove_index, element, graph)
-            new_instance_value = get_instance_value(new_group_list, graph)
+        new_instance_value = get_instance_value(new_group_list, graph)
 
-            if new_instance_value > best_neighbor_solution:
-                best_neighbor          = new_group_list
-                best_neighbor_solution = new_instance_value
-                best_tabu_movement     = tabu
+        if new_instance_value > best_neighbor_solution:
+            best_neighbor          = new_group_list
+            best_neighbor_solution = new_instance_value
+            best_tabu_movement     = tabu
 
     if best_neighbor_solution > 0:
         if len(tabu_movements) == max_tabu_size:
             del tabu_movements[0:len(tabu_movements)]
 
         tabu_movements.append(best_tabu_movement)
+        #print tabu
         actual_instance = best_neighbor
         actual_value = best_neighbor_solution
 
@@ -240,3 +254,9 @@ print "Final value : " + str(actual_value)
 print "Final Groups settings :"
 for group in actual_instance:
     print group.group_vertices
+if tabu_prob >= 0:
+    print "Tabu probability used: " + str((1/float(tabu_prob+1))*100) + "%" 
+else:
+    print "Tabu probability not used"
+
+print "time taken : " + str(time.time() - init_time) + " sec" 
