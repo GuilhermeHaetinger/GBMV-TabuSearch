@@ -1,6 +1,7 @@
 from vertex_group import vertex_group as Group
 from graph import graph as Graph
 from random import randint
+from random import uniform
 import sys
 import time
 
@@ -8,27 +9,121 @@ ELEMENT_NOT_IN_GROUP     = -3
 ELEMENT_ALREADY_IN_GROUP = -2
 FAILED                   = -1
 SUCCEEDED                =  0
+'''
+Parses an input line ignoring the carriage return
 
-#NAO SEI SE UTILIZAR
-class tabu_movement:
-    def __init__(self, remove_group_index, element):
-        self.remove_group_index = remove_group_index
-        self.element = element
+Params:
+    line(string) : line to parse
 
-def test_if_element_repeats(list_of_groups):
-    a = dict()
+returns:
+    line's values that were separated by a blank space, ignoring carriage return (List(string))
 
-    for i in range(0, len(list_of_groups)):
-        for k in range(0, len(list_of_groups[i].group_vertices)):
-            if list_of_groups[i].group_vertices[k] in a:
-                print list_of_groups[i].group_vertices[k]
-            a[list_of_groups[i].group_vertices[k]] = 1 
-            
-
+'''
 def line_parsing(line):
     return line.replace(" \n", "").split(" ")
 
-def fill_group_randomly(group, unused_vertices, num_of_vertices, graph):
+'''
+Reads an instance of the GBMV problem, creating, initializing (even randomly) and attributing the right values 
+
+Params:
+    file(File) : instance file
+
+returns:
+    graph(Graph)               : instantiated graph
+    groups(List(vertex_group)) : instantiated groups in a list, or 
+    num_of_vertices(int)       : number of vertices for further operations
+    *in this respective order*
+
+'''
+def read_instance_file(file):    
+    num_of_vertices, num_of_groups = line_parsing(file.next())
+    num_of_vertices                = int(num_of_vertices)
+    num_of_groups                  = int(num_of_groups)
+
+    bound_line   = line_parsing(file.next())
+    bound_count  = 0
+    group_bounds = []
+
+    while(bound_count < num_of_groups):
+        group_bounds.append([int(bound_line[bound_count*2]), int(bound_line[bound_count*2 + 1])])
+        bound_count += 1 
+
+    weight_line    = line_parsing(file.next())
+    vertex_weights = []
+
+    for i in range(0, num_of_vertices):
+        vertex_weights.append(int(weight_line[i]))
+        if vertex_weights[i] < 0:
+            exit("NEGATIVE VERTEX FOUND!!!")
+
+    graph_dict = dict()
+
+    for line in file:
+        edge_line                       = line.replace("\n", "").split(" ")
+        
+        origin                          = int(edge_line[0])
+        destination                     = int(edge_line[1])
+        value                           = float(edge_line[2])
+        
+        graph_dict[origin, destination] = value
+
+
+    graph  = Graph(num_of_vertices, graph_dict, vertex_weights)
+    groups = initialize_groups_randomly(num_of_groups, num_of_vertices, group_bounds, graph)
+
+    return graph, groups, num_of_vertices
+
+'''
+Calculates the problem's solution value
+
+Params:
+    graph(Graph)                       : graph with the required values
+    list_of_groups(List(vertex_group)) : problem solution
+
+returns:
+    solution's value (int)
+
+'''
+def get_instance_value(list_of_groups, graph):
+    instance_value = 0
+    for group in list_of_groups:
+        instance_value += group.get_group_value(graph)
+
+    return instance_value
+
+'''
+Gets two random diferent groups from the problem's solution
+
+Params:
+    list_of_groups(List(vertex_group)) : problem solution
+
+returns:
+    group1 index (int)
+    group2 index (int)
+
+'''
+def get_random_group_indexes(list_of_groups):
+    rand_remove_index = randint(0, len(list_of_groups)-1)
+    rand_add_index    = randint(0, len(list_of_groups)-1)
+
+    while rand_add_index == rand_remove_index:
+        rand_add_index = randint(0, len(list_of_groups)-1)
+
+    return [rand_remove_index, rand_add_index]
+
+'''
+fills a given group with available vertices until it hits the lower limit of weights
+
+Params:
+    group(vertex_group)        : group to fill
+    unused_vertices(List(int)) : available vertices
+    graph(Graph)               : Graph with the required values for weight validation 
+
+returns:
+    filled group (vertex_group)
+
+'''
+def fill_group_randomly(group, unused_vertices, graph):
     while(group.min_bound > group.get_group_value(graph)):
         rand_vertice = randint(0, len(unused_vertices)-1)
         group.group_vertices.append(unused_vertices[rand_vertice])
@@ -36,7 +131,19 @@ def fill_group_randomly(group, unused_vertices, num_of_vertices, graph):
 
     return group
 
+'''
+Creates a valid first solution randomly
 
+Params:
+    num_of_groups(int)   : number of groups for the problem instance
+    num_of_vertices(int) : number of vertices for the problem instance
+    list_of_boundaries(List(int)) : boundaries for each group in the format [group1Lower, group1Higher, group2Lower, group2Higher, ...]
+    graph(Graph)               : Graph with the required values for weight validation 
+
+returns:
+    filled group (vertex_group)
+
+'''
 def initialize_groups_randomly(num_of_groups, num_of_vertices, list_of_boundaries, graph):
     list_of_groups = []
     for i in range(0, num_of_groups):
@@ -47,8 +154,7 @@ def initialize_groups_randomly(num_of_groups, num_of_vertices, list_of_boundarie
         unused_vertices.append(i)
     
     for i in range(0, num_of_groups):
-        list_of_groups[i] = fill_group_randomly(list_of_groups[i], unused_vertices, num_of_vertices, graph)
-        print list_of_groups[i].group_vertices
+        list_of_groups[i] = fill_group_randomly(list_of_groups[i], unused_vertices, graph)
 
     for i in unused_vertices:
         randGroup = randint(0, num_of_groups-1)
@@ -58,41 +164,20 @@ def initialize_groups_randomly(num_of_groups, num_of_vertices, list_of_boundarie
 
     return list_of_groups
 
+'''
+Executes a change on the solution, changing an element from a group to another
 
-def initialize_groups_in_order(num_of_groups, num_of_vertices, list_of_boundaries):
-    vertices_per_groups    = num_of_vertices/num_of_groups
-    list_of_group_vertices = []
-    group_vertices_buffer  = []
-    division_buffer        = 0
+Params:
+    list_of_groups(List(vertex_group)) : actual solution
+    add_group_index(int)               : index for the group in which the element will be added
+    remove_group_index(int)            : index for the group in which the element will be removed
+    element(int)                       : element in transition
+    graph(Graph)                       : Graph with the required values for weight validation 
 
-    for i in range(0, num_of_vertices+1):
-        if division_buffer + 1 == i / vertices_per_groups:
-            division_buffer      += 1
-            list_of_group_vertices.append(group_vertices_buffer)
-            group_vertices_buffer = []
+returns:
+    solution with the executed changes
 
-        group_vertices_buffer.append(i)
-    
-    groups = []
-
-    for i in range(0, num_of_groups):
-        min      = list_of_boundaries[i][0]
-        max      = list_of_boundaries[i][1]
-        vertices = list_of_group_vertices[i]
-        group    = Group(min, max, vertices)
-        groups.append(group)
-    
-    return groups
-
-def get_random_group_indexes(list_of_groups):
-    rand_remove_index = randint(0, len(list_of_groups)-1)
-    rand_add_index    = randint(0, len(list_of_groups)-1)
-
-    while rand_add_index == rand_remove_index:
-        rand_add_index = randint(0, len(list_of_groups)-1)
-
-    return [rand_remove_index, rand_add_index]
-
+'''
 def set_random_neighbor(list_of_groups, add_group_index, remove_group_index, element, graph): 
     new_group_list = list_of_groups[:]
 
@@ -110,153 +195,157 @@ def set_random_neighbor(list_of_groups, add_group_index, remove_group_index, ele
 
     return new_group_list
 
-def get_instance_value(list_of_groups, graph):
-    instance_value = 0
-    for group in list_of_groups:
-        instance_value += group.get_group_value(graph)
+'''
+Runs TS with imediate neighbors
 
-    return instance_value
+Params:
+    groups(List(vertex_group)) : initial solution
+    graph(Graph)               : Graph with the required values for weight validation 
+    num_of_iterations(int)     : wanted number of iterations
+    max_tabu_size(int)         : tabu movements list limiter
+    tabu_prob(float)           : probability to be added in tabu movements list
+    file_to_write(File)        : file in which the results will be written
 
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
-#INITIALIZATION
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
+returns:
+    final solution (List(vertex_groups))
 
-file = open(sys.argv[1], "r")
+'''
+def run_simple_tabu_search(groups, graph, num_of_iterations, max_tabu_size, tabu_prob, file_to_write):
 
-num_of_vertices, num_of_groups = line_parsing(file.next())
-num_of_vertices                = int(num_of_vertices)
-num_of_groups                  = int(num_of_groups)
+    actual_instance = groups[:]
+    actual_value    = get_instance_value(actual_instance, graph)
+    tabu_movements  = []
+    best_solution_found = 0
 
-print "number of vertices : " + str(num_of_vertices) + "\n" + "number of groups : " + str(num_of_groups) + "\n"
+    #for every iteration
+    for i in range(0, num_of_iterations):
 
-bound_line   = line_parsing(file.next())
-bound_count  = 0
-group_bounds = []
-
-while(bound_count < num_of_groups):
-    group_bounds.append([int(bound_line[bound_count*2]), int(bound_line[bound_count*2 + 1])])
-    bound_count += 1 
-
-print "boundaries for each group:"
-
-for element in group_bounds:
-    print element
-
-weight_line    = line_parsing(file.next())
-vertex_weights = []
-
-for i in range(0, num_of_vertices):
-    vertex_weights.append(weight_line[i])
-    if vertex_weights[i] < 0:
-        exit("NEGATIVE VERTEX FOUND!!!")
-
-graph_dict = dict()
-
-for line in file:
-    edge_line                       = line.replace("\n", "").split(" ")
-    
-    origin                          = int(edge_line[0])
-    destination                     = int(edge_line[1])
-    value                           = float(edge_line[2])
-    
-    graph_dict[origin, destination] = value
-
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
-#Application
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
-
-num_of_iterations = 500
-num_of_neighbors  = 100
-
-
-graph         = Graph(num_of_vertices, graph_dict, vertex_weights)
-
-
-groups = initialize_groups_randomly(num_of_groups, num_of_vertices, group_bounds, graph)
-
-for group in groups:
-    print str(group.group_vertices) + str(group.max_bound) + ' ' + str(group.min_bound)
-
-initial_value = get_instance_value(groups, graph)
-
-print "initial value : " + str(initial_value)
-
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
-#Tabu Search
-#=========================================================================================================================
-#=========================================================================================================================
-#=========================================================================================================================
-
-max_tabu_size   = 100
-actual_instance = groups
-actual_value    = initial_value
-tabu_movements  = []
-best_solution_found = 0
-best_found = None
-num_of_elements = 30
-try:
-    tabu_prob = int(sys.argv[2])
-except Exception as e:
-    tabu_prob = -1
-
-init_time = time.time()
-
-
-for i in range(0, num_of_iterations):
-
-    best_neighbor_solution = 0
-    best_neighbor          = None
-    best_tabu_movement     = None
-
-    for j in range(0, num_of_neighbors):
-        tabu = []
+        best_neighbor_solution = 0
+        best_neighbor          = None
+        best_tabu_movement     = None
         new_group_list = actual_instance[:]
-        for k in range(0, num_of_elements):
-            rand_remove, rand_add = get_random_group_indexes(new_group_list)
-            element = new_group_list[rand_remove].get_random_element()
-            if tabu_prob >= 0:
-                if randint(0, tabu_prob) == 0:
-                    tabu.append(element)
+        rand_group, rand_add = get_random_group_indexes(new_group_list) #rand_add wont be used because we will execute for every group available
+        element = new_group_list[rand_group].get_random_element()
+
+        #for every group available to send the element
+        for j in range(0, len(new_group_list)):
+            
             if element not in tabu_movements:
-                new_group_list = set_random_neighbor(new_group_list, rand_add, rand_remove, element, graph)
+                if j != rand_group:
+                    new_group_list = set_random_neighbor(new_group_list, j, rand_group, element, graph)
+            
+            new_instance_value = get_instance_value(new_group_list, graph)
 
-        new_instance_value = get_instance_value(new_group_list, graph)
+            if new_instance_value > best_neighbor_solution:
+                best_neighbor          = new_group_list
+                best_neighbor_solution = new_instance_value
+                best_tabu_movement     = element
 
-        if new_instance_value > best_neighbor_solution:
-            best_neighbor          = new_group_list
-            best_neighbor_solution = new_instance_value
-            best_tabu_movement     = tabu
+        if uniform(0, 1) <= tabu_prob:
+            tabu_movements.append(element)
 
-    if best_neighbor_solution > 0:
-        if len(tabu_movements) == max_tabu_size:
-            del tabu_movements[0:len(tabu_movements)]
+        if best_neighbor_solution > 0:
+            if len(tabu_movements) == max_tabu_size:
+                del tabu_movements[0:len(tabu_movements)]
 
-        tabu_movements.append(best_tabu_movement)
-        #print tabu
-        actual_instance = best_neighbor
-        actual_value = best_neighbor_solution
+            tabu_movements.append(best_tabu_movement)
+            actual_instance = best_neighbor
+            actual_value    = best_neighbor_solution
 
-        if actual_value > best_solution_found:
-            best_solution_found  = actual_value
-            best_found = actual_instance
+            if actual_value > best_solution_found:
+                best_solution_found  = actual_value
+                best_found           = actual_instance
 
-print "Final value : " + str(actual_value)
-print "Final Groups settings :"
-for group in actual_instance:
-    print group.group_vertices
-if tabu_prob >= 0:
-    print "Tabu probability used: " + str((1/float(tabu_prob+1))*100) + "%" 
-else:
-    print "Tabu probability not used"
 
-print "time taken : " + str(time.time() - init_time) + " sec" 
+    file_to_write.write(str(best_solution_found) + ","  + str(actual_value) + "\n")
+    return groups
+
+'''
+Executes a change on the solution, changing an element from a group to another as well as treating tabu conditions
+
+Params:
+    groups(List(vertex_group))    : actual solution
+    tabu_prob(float)              : probability to add element in tabu list
+    graph(Graph)                  : Graph with the required values for weight validation 
+    new_tabu_movements(List(int)) : list of TO BE ADDED tabus
+    tabu_movements(List(int))     : actual tabu movements
+
+returns:
+    solution with the executed changes
+
+'''
+def execute_shift(groups, tabu_prob, graph, new_tabu_movements, tabu_movements):
+    rand_remove, rand_add = get_random_group_indexes(groups)
+    element = groups[rand_remove].get_random_element()
+    if element not in tabu_movements:
+        if tabu_prob >= 0:
+            if uniform(0, 1) <= tabu_prob :
+                new_tabu_movements.append(element)
+        groups = set_random_neighbor(groups, rand_add, rand_remove, element, graph)
+    return groups
+
+
+'''
+Runs TS with "Big-Step" neighbors
+
+Params:
+    groups(List(vertex_group)) : initial solution
+    graph(Graph)               : Graph with the required values for weight validation 
+    num_of_iterations(int)     : wanted number of iterations
+    num_of_neighbors(int)      : wanted number of neighbors to compare
+    num_of_elements(int)       : wanted number of shifts in a neighbor execution
+    max_tabu_size(int)         : tabu movements list limiter
+    tabu_prob(float)           : probability to be added in tabu movements list
+    file_to_write(File)        : file in which the results will be written
+
+returns:
+    final solution (List(vertex_groups))
+
+'''
+
+def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors, num_of_elements, max_tabu_size, tabu_prob, file_to_write):
+    
+    actual_instance = groups[:]
+    actual_value    = get_instance_value(actual_instance, graph)
+    tabu_movements  = []
+    best_solution_found = 0
+    best_found = None
+
+    # for every iteration
+    for i in range(0, num_of_iterations):
+        best_neighbor_solution = 0
+        best_neighbor          = None
+        best_tabu_movement     = None
+    # for every neighbor 
+        for j in range(0, num_of_neighbors):
+            new_tabu_movements = []
+            new_group_list = actual_instance[:]
+    # for every shift
+            for k in range(0, num_of_elements):
+                new_group_list = execute_shift(new_group_list, tabu_prob, graph, new_tabu_movements, tabu_movements)
+            neighbor_value = get_instance_value(new_group_list, graph)
+
+            #if the new value is higher, we shoul make it the best neighbor
+            if neighbor_value > best_neighbor_solution:
+                best_neighbor          = new_group_list
+                best_neighbor_solution = neighbor_value
+                best_tabu_movement     = new_tabu_movements
+
+        # if the best neighbor is valid
+        if best_neighbor_solution > 0:
+            #if the tabu list exceeds its maximum size we should erase it completely
+            if len(tabu_movements) == max_tabu_size:
+                del tabu_movements[0:len(tabu_movements)]
+            #exchange the actual values
+            tabu_movements.append(best_tabu_movement)
+            actual_instance = best_neighbor
+            actual_value    = best_neighbor_solution
+            #exchange the best value found if needed
+            if actual_value >= best_solution_found:
+                best_solution_found  = actual_value
+                best_found           = actual_instance
+
+    #write the result
+    if file_to_write != None:
+        file_to_write.write(str(best_solution_found) + ","  + str(actual_value) + "\n")
+    return best_found
