@@ -2,6 +2,7 @@ from vertex_group import vertex_group as Group
 from graph import graph as Graph
 from random import randint
 from random import uniform
+from random import seed
 import sys
 import time
 
@@ -9,6 +10,7 @@ ELEMENT_NOT_IN_GROUP     = -3
 ELEMENT_ALREADY_IN_GROUP = -2
 FAILED                   = -1
 SUCCEEDED                =  0
+
 '''
 Parses an input line ignoring the carriage return
 
@@ -36,6 +38,7 @@ returns:
 
 '''
 def read_instance_file(file):    
+
     num_of_vertices, num_of_groups = line_parsing(file.next())
     num_of_vertices                = int(num_of_vertices)
     num_of_groups                  = int(num_of_groups)
@@ -210,16 +213,17 @@ returns:
     final solution (List(vertex_groups))
 
 '''
-def run_simple_tabu_search(groups, graph, num_of_iterations, max_tabu_size, tabu_prob, file_to_write):
+def run_simple_tabu_search(groups, graph, num_of_iterations, max_tabu_size, tabu_prob):
 
     actual_instance = groups[:]
     actual_value    = get_instance_value(actual_instance, graph)
     tabu_movements  = []
     best_solution_found = 0
+    best_found = actual_instance
 
     #for every iteration
     for i in range(0, num_of_iterations):
-
+        
         best_neighbor_solution = 0
         best_neighbor          = None
         best_tabu_movement     = None
@@ -235,17 +239,19 @@ def run_simple_tabu_search(groups, graph, num_of_iterations, max_tabu_size, tabu
                     new_group_list = set_random_neighbor(new_group_list, j, rand_group, element, graph)
             
             new_instance_value = get_instance_value(new_group_list, graph)
-
-            if new_instance_value > best_neighbor_solution:
+            
+            if new_instance_value > best_neighbor_solution and new_instance_value != actual_value:
                 best_neighbor          = new_group_list
                 best_neighbor_solution = new_instance_value
                 best_tabu_movement     = element
 
-        if uniform(0, 1) <= tabu_prob:
-            tabu_movements.append(element)
-
+        if element not in tabu_movements:
+            if uniform(0, 1) <= tabu_prob:
+                tabu_movements.append(element)
+        
         if best_neighbor_solution > 0:
-            if len(tabu_movements) == max_tabu_size:
+
+            if len(tabu_movements) >= max_tabu_size:
                 del tabu_movements[0:len(tabu_movements)]
 
             tabu_movements.append(best_tabu_movement)
@@ -256,9 +262,7 @@ def run_simple_tabu_search(groups, graph, num_of_iterations, max_tabu_size, tabu
                 best_solution_found  = actual_value
                 best_found           = actual_instance
 
-
-    file_to_write.write(str(best_solution_found) + ","  + str(actual_value) + "\n")
-    return groups
+    return best_found
 
 '''
 Executes a change on the solution, changing an element from a group to another as well as treating tabu conditions
@@ -277,10 +281,10 @@ returns:
 def execute_shift(groups, tabu_prob, graph, new_tabu_movements, tabu_movements):
     rand_remove, rand_add = get_random_group_indexes(groups)
     element = groups[rand_remove].get_random_element()
-    if element not in tabu_movements:
+    if [element, rand_add] not in tabu_movements:
         if tabu_prob >= 0:
             if uniform(0, 1) <= tabu_prob :
-                new_tabu_movements.append(element)
+                new_tabu_movements.append([element, rand_add])
         groups = set_random_neighbor(groups, rand_add, rand_remove, element, graph)
     return groups
 
@@ -303,7 +307,7 @@ returns:
 
 '''
 
-def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors, num_of_elements, max_tabu_size, tabu_prob, file_to_write):
+def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors, num_of_elements, max_tabu_size, tabu_prob):
     
     actual_instance = groups[:]
     actual_value    = get_instance_value(actual_instance, graph)
@@ -326,7 +330,7 @@ def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors,
             neighbor_value = get_instance_value(new_group_list, graph)
 
             #if the new value is higher, we shoul make it the best neighbor
-            if neighbor_value > best_neighbor_solution:
+            if neighbor_value > best_neighbor_solution and neighbor_value != actual_value:
                 best_neighbor          = new_group_list
                 best_neighbor_solution = neighbor_value
                 best_tabu_movement     = new_tabu_movements
@@ -337,7 +341,7 @@ def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors,
             if len(tabu_movements) == max_tabu_size:
                 del tabu_movements[0:len(tabu_movements)]
             #exchange the actual values
-            tabu_movements.append(best_tabu_movement)
+            tabu_movements.extend(best_tabu_movement)
             actual_instance = best_neighbor
             actual_value    = best_neighbor_solution
             #exchange the best value found if needed
@@ -345,7 +349,4 @@ def run_big_step_tabu_search(groups, graph, num_of_iterations, num_of_neighbors,
                 best_solution_found  = actual_value
                 best_found           = actual_instance
 
-    #write the result
-    if file_to_write != None:
-        file_to_write.write(str(best_solution_found) + ","  + str(actual_value) + "\n")
     return best_found
